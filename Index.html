@@ -1,0 +1,719 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>야구 경기 기록 프로그램</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;700;900&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Noto Sans KR', sans-serif;
+            background-color: #f3f4f6; /* Tailwind gray-100 */
+        }
+        
+        /* 다이아몬드(베이스) 스타일링 */
+        .baseball-diamond {
+            position: relative;
+            width: 150px;
+            height: 150px;
+            transform: rotate(45deg);
+            background-color: #4ade80; /* 잔디색 */
+            border: 2px solid #fff;
+            margin: 20px auto;
+        }
+
+        .base {
+            position: absolute;
+            width: 24px;
+            height: 24px;
+            background-color: white;
+            border: 2px solid #cbd5e1;
+            transform: rotate(-45deg); /* 글자나 아이콘이 똑바로 보이게 */
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            font-size: 0.75rem;
+            transition: all 0.3s ease;
+        }
+
+        .base.occupied {
+            background-color: #ef4444; /* 주자가 있으면 빨간색 */
+            border-color: #b91c1c;
+            color: white;
+        }
+
+        /* 1, 2, 3루, 홈 위치 지정 (홈플레이트가 하단으로 오도록 수정) */
+        .base-home { bottom: -12px; right: -12px; border-radius: 5px; }
+        .base-1b { top: -12px; right: -12px; }
+        .base-2b { top: -12px; left: -12px; }
+        .base-3b { bottom: -12px; left: -12px; }
+        
+        /* 주자 클릭 관련 스타일 */
+        .cursor-pointer { cursor: pointer; }
+
+        /* 볼카운트 표시기 */
+        .count-indicator {
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+            display: inline-block;
+            margin-right: 4px;
+            background-color: #e2e8f0; /* 기본 회색 */
+            border: 1px solid #cbd5e1;
+        }
+        .count-b.active { background-color: #22c55e; } /* 볼은 초록색 */
+        .count-s.active { background-color: #eab308; } /* 스트라이크는 노란색 */
+        .count-o.active { background-color: #ef4444; } /* 아웃은 빨간색 */
+
+        /* 스코어보드 테이블 스타일 */
+        .scoreboard-table th, .scoreboard-table td {
+            border: 1px solid #475569;
+            text-align: center;
+            padding: 4px;
+        }
+        .scoreboard-table th { background-color: #1e293b; color: white; }
+        .scoreboard-table td { background-color: white; font-weight: bold; }
+        .current-inning-col { background-color: #fef08a !important; }
+    </style>
+</head>
+<body class="text-slate-800 h-screen flex flex-col">
+
+    <div id="setup-screen" class="container mx-auto p-4 max-w-4xl flex-grow overflow-auto">
+        <h1 class="text-3xl font-black text-center mb-6 text-slate-800">⚾ 야구 기록 프로그램 설정</h1>
+        
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+            <!-- 원정팀 설정 -->
+            <div class="bg-white p-6 rounded-xl shadow-md border-t-4 border-blue-500">
+                <h2 class="text-xl font-bold mb-4 flex items-center">
+                    <span class="bg-blue-500 text-white px-2 py-1 rounded mr-2 text-sm">AWAY</span>
+                    원정팀 라인업
+                </h2>
+                <div class="mb-4">
+                    <label class="block text-sm font-semibold text-gray-700">팀 이름</label>
+                    <input type="text" id="away-team-name" value="원정팀" class="mt-1 w-full p-2 border border-gray-300 rounded focus:ring-blue-500 focus:border-blue-500">
+                </div>
+                <div class="mb-4">
+                    <label class="block text-sm font-semibold text-gray-700">선발 투수</label>
+                    <input type="text" id="away-pitcher" placeholder="투수 이름" class="mt-1 w-full p-2 border border-gray-300 rounded">
+                </div>
+                <div>
+                    <label class="block text-sm font-semibold text-gray-700 mb-2">선발 타자 (1~9번)</label>
+                    <div id="away-lineup" class="space-y-2">
+                        <!-- JS로 채워짐 -->
+                    </div>
+                </div>
+            </div>
+
+            <!-- 홈팀 설정 -->
+            <div class="bg-white p-6 rounded-xl shadow-md border-t-4 border-red-500">
+                <h2 class="text-xl font-bold mb-4 flex items-center">
+                    <span class="bg-red-500 text-white px-2 py-1 rounded mr-2 text-sm">HOME</span>
+                    홈팀 라인업
+                </h2>
+                <div class="mb-4">
+                    <label class="block text-sm font-semibold text-gray-700">팀 이름</label>
+                    <input type="text" id="home-team-name" value="홈팀" class="mt-1 w-full p-2 border border-gray-300 rounded focus:ring-red-500 focus:border-red-500">
+                </div>
+                <div class="mb-4">
+                    <label class="block text-sm font-semibold text-gray-700">선발 투수</label>
+                    <input type="text" id="home-pitcher" placeholder="투수 이름" class="mt-1 w-full p-2 border border-gray-300 rounded">
+                </div>
+                <div>
+                    <label class="block text-sm font-semibold text-gray-700 mb-2">선발 타자 (1~9번)</label>
+                    <div id="home-lineup" class="space-y-2">
+                        <!-- JS로 채워짐 -->
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="text-center mt-8 pb-8">
+            <button onclick="startGame()" class="bg-slate-800 hover:bg-slate-700 text-white text-xl font-bold py-3 px-12 rounded-full shadow-lg transition-transform transform hover:scale-105">
+                경기 시작!
+            </button>
+        </div>
+    </div>
+
+    <div id="game-screen" class="hidden container mx-auto p-2 sm:p-4 max-w-5xl h-full flex flex-col">
+        
+        <!-- 상단 스코어보드 -->
+        <div class="bg-white rounded-xl shadow p-2 sm:p-4 mb-4 overflow-x-auto">
+            <table class="scoreboard-table w-full text-sm sm:text-base">
+                <thead>
+                    <tr>
+                        <th class="w-20">팀명</th>
+                        <th>1</th><th>2</th><th>3</th><th>4</th><th>5</th><th>6</th><th>7</th><th>8</th><th>9</th>
+                        <th class="w-12 bg-red-900">R</th>
+                        <th class="w-12 bg-blue-900">H</th>
+                        <th class="w-12 bg-green-900">E</th>
+                    </tr>
+                </thead>
+                <tbody id="scoreboard-body">
+                    <!-- JS로 렌더링 됨 -->
+                </tbody>
+            </table>
+        </div>
+
+        <div class="flex flex-col md:flex-row gap-4 flex-grow">
+            <!-- 좌측: 현재 상황 표시기 (주자, 카운트, 투수/타자) -->
+            <div class="bg-white rounded-xl shadow p-4 w-full md:w-1/2 flex flex-col justify-between">
+                
+                <div class="flex justify-between items-center mb-4">
+                    <div class="text-xl font-bold text-slate-700" id="current-inning-text">1회 초</div>
+                    <div class="text-sm px-3 py-1 bg-slate-100 rounded-full border" id="outs-text">0 OUT</div>
+                </div>
+
+                <!-- 주자 및 베이스 다이아몬드 -->
+                <div class="flex-grow flex flex-col items-center justify-center py-4">
+                    <div class="baseball-diamond">
+                        <div id="base-2" class="base base-2b cursor-pointer shadow-md hover:scale-110" onclick="toggleBase(2)" title="클릭하여 2루 주자 추가/삭제">2</div>
+                        <div id="base-3" class="base base-3b cursor-pointer shadow-md hover:scale-110" onclick="toggleBase(3)" title="클릭하여 3루 주자 추가/삭제">3</div>
+                        <div id="base-1" class="base base-1b cursor-pointer shadow-md hover:scale-110" onclick="toggleBase(1)" title="클릭하여 1루 주자 추가/삭제">1</div>
+                        <div class="base base-home shadow-md" style="background-color: #cbd5e1;">H</div>
+                    </div>
+                    <div class="text-xs text-slate-400 mt-6 text-center">※ 1, 2, 3루를 클릭하여 주자를 수동 배치/제거할 수 있습니다.</div>
+                </div>
+
+                <!-- 볼 카운트 -->
+                <div class="bg-slate-50 p-4 rounded-lg border border-slate-200 mb-4">
+                    <div class="flex items-center mb-2">
+                        <span class="w-6 font-bold text-green-600">B</span>
+                        <div class="flex gap-1">
+                            <span id="b-1" class="count-indicator count-b"></span>
+                            <span id="b-2" class="count-indicator count-b"></span>
+                            <span id="b-3" class="count-indicator count-b"></span>
+                        </div>
+                    </div>
+                    <div class="flex items-center mb-2">
+                        <span class="w-6 font-bold text-yellow-500">S</span>
+                        <div class="flex gap-1">
+                            <span id="s-1" class="count-indicator count-s"></span>
+                            <span id="s-2" class="count-indicator count-s"></span>
+                        </div>
+                    </div>
+                    <div class="flex items-center">
+                        <span class="w-6 font-bold text-red-500">O</span>
+                        <div class="flex gap-1">
+                            <span id="o-1" class="count-indicator count-o"></span>
+                            <span id="o-2" class="count-indicator count-o"></span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 투수/타자 정보 -->
+                <div class="grid grid-cols-2 gap-4">
+                    <div class="bg-blue-50 border border-blue-200 p-3 rounded-lg text-center">
+                        <div class="text-xs text-blue-600 font-bold mb-1">현재 투수</div>
+                        <div class="text-lg font-bold" id="current-pitcher">투수명</div>
+                    </div>
+                    <div class="bg-red-50 border border-red-200 p-3 rounded-lg text-center">
+                        <div class="text-xs text-red-600 font-bold mb-1"><span id="current-batter-order">1</span>번 타자</div>
+                        <div class="text-lg font-bold" id="current-batter">타자명</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 우측: 컨트롤 패널 (조작 버튼 및 로그) -->
+            <div class="w-full md:w-1/2 flex flex-col gap-4">
+                
+                <!-- 조작 버튼 -->
+                <div class="bg-white rounded-xl shadow p-4">
+                    <h3 class="font-bold text-slate-700 mb-3 border-b pb-2">투구 결과</h3>
+                    <div class="grid grid-cols-4 gap-2 mb-4">
+                        <button onclick="recordPitch('ball')" class="bg-green-100 hover:bg-green-200 text-green-800 font-bold py-2 rounded">볼 (B)</button>
+                        <button onclick="recordPitch('strike')" class="bg-yellow-100 hover:bg-yellow-200 text-yellow-800 font-bold py-2 rounded">스트라이크</button>
+                        <button onclick="recordPitch('foul')" class="bg-gray-100 hover:bg-gray-200 text-gray-800 font-bold py-2 rounded">파울</button>
+                        <button onclick="recordOut('strikeout')" class="bg-red-100 hover:bg-red-200 text-red-800 font-bold py-2 rounded">삼진</button>
+                    </div>
+
+                    <h3 class="font-bold text-slate-700 mb-3 border-b pb-2">타격 결과</h3>
+                    <div class="grid grid-cols-4 gap-2 mb-4">
+                        <button onclick="recordHit(1)" class="bg-blue-100 hover:bg-blue-200 text-blue-800 font-bold py-2 rounded">1루타</button>
+                        <button onclick="recordHit(2)" class="bg-blue-100 hover:bg-blue-200 text-blue-800 font-bold py-2 rounded">2루타</button>
+                        <button onclick="recordHit(3)" class="bg-blue-100 hover:bg-blue-200 text-blue-800 font-bold py-2 rounded">3루타</button>
+                        <button onclick="recordHit(4)" class="bg-purple-100 hover:bg-purple-200 text-purple-800 font-bold py-2 rounded">홈런!</button>
+                    </div>
+
+                    <h3 class="font-bold text-slate-700 mb-3 border-b pb-2">아웃/기타</h3>
+                    <div class="grid grid-cols-3 gap-2">
+                        <button onclick="recordOut('ground')" class="bg-red-50 hover:bg-red-100 text-red-700 font-bold py-2 rounded border border-red-200">땅볼 아웃</button>
+                        <button onclick="recordOut('fly')" class="bg-red-50 hover:bg-red-100 text-red-700 font-bold py-2 rounded border border-red-200">뜬공 아웃</button>
+                        <button onclick="recordPitch('hbp')" class="bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold py-2 rounded border border-indigo-200">몸에맞는볼</button>
+                    </div>
+                </div>
+
+                <!-- 플레이 로그 -->
+                <div class="bg-white rounded-xl shadow p-4 flex-grow flex flex-col">
+                    <h3 class="font-bold text-slate-700 mb-2">경기 로그 (최근)</h3>
+                    <div id="play-log" class="bg-slate-900 text-green-400 font-mono text-sm p-3 rounded-lg overflow-y-auto flex-grow h-32 md:h-auto whitespace-pre-wrap flex flex-col-reverse">
+                        <!-- 최신 로그가 위에 쌓임 -->
+                    </div>
+                </div>
+
+            </div>
+        </div>
+
+        <!-- 타자별 경기 기록 (박스스코어) 영역 -->
+        <div class="bg-white rounded-xl shadow p-4 mt-4 w-full overflow-x-auto">
+            <h3 class="font-bold text-slate-700 mb-3 border-b pb-2 flex justify-between items-center">
+                <span>📋 타자별 경기 기록 (박스스코어)</span>
+                <div class="space-x-2">
+                    <button onclick="toggleRecordTeam('away')" id="btn-record-away" class="px-3 py-1 bg-blue-500 text-white rounded font-bold text-sm transition-colors">원정팀</button>
+                    <button onclick="toggleRecordTeam('home')" id="btn-record-home" class="px-3 py-1 bg-gray-200 text-gray-700 hover:bg-gray-300 rounded font-bold text-sm transition-colors">홈팀</button>
+                </div>
+            </h3>
+            <table class="w-full text-sm text-center border-collapse">
+                <thead id="batter-record-head">
+                    <!-- JS로 렌더링 -->
+                </thead>
+                <tbody id="batter-record-body">
+                    <!-- JS로 렌더링 -->
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <script>
+        // DOM 로드 후 라인업 입력칸 생성
+        document.addEventListener('DOMContentLoaded', () => {
+            const awayLineup = document.getElementById('away-lineup');
+            const homeLineup = document.getElementById('home-lineup');
+            
+            for (let i = 1; i <= 9; i++) {
+                awayLineup.innerHTML += `<div class="flex items-center gap-2">
+                    <span class="font-bold text-gray-500 w-4">${i}.</span>
+                    <input type="text" id="away-batter-${i}" placeholder="타자 이름" class="flex-grow p-1 border rounded text-sm">
+                </div>`;
+                
+                homeLineup.innerHTML += `<div class="flex items-center gap-2">
+                    <span class="font-bold text-gray-500 w-4">${i}.</span>
+                    <input type="text" id="home-batter-${i}" placeholder="타자 이름" class="flex-grow p-1 border rounded text-sm">
+                </div>`;
+            }
+
+            // 테스트를 위한 더미 데이터 채우기 (편의상)
+            document.getElementById('away-pitcher').value = "류현진";
+            document.getElementById('home-pitcher').value = "김광현";
+            for(let i=1; i<=9; i++) {
+                document.getElementById(`away-batter-${i}`).value = `원정타자${i}`;
+                document.getElementById(`home-batter-${i}`).value = `홈타자${i}`;
+            }
+        });
+
+        let currentRecordView = 'away'; // 타자 기록지 현재 뷰어 상태 ('away' or 'home')
+
+        let game = {
+            teams: {
+                away: { 
+                    name: '', pitcher: '', lineup: [], currentBatterIdx: 0, runs: Array(9).fill(0), hits: 0, errors: 0,
+                    scorebook: Array.from({length: 9}, () => Array(15).fill().map(()=>[])) 
+                },
+                home: { 
+                    name: '', pitcher: '', lineup: [], currentBatterIdx: 0, runs: Array(9).fill(0), hits: 0, errors: 0,
+                    scorebook: Array.from({length: 9}, () => Array(15).fill().map(()=>[]))
+                }
+            },
+            inning: 1, // 1~9
+            isTop: true, // 초(true) / 말(false)
+            outs: 0,
+            balls: 0,
+            strikes: 0,
+            bases: { 1: null, 2: null, 3: null }, // 주자가 있으면 타자 이름 저장
+            logs: []
+        };
+
+        function startGame() {
+            // 데이터 수집
+            game.teams.away.name = document.getElementById('away-team-name').value || '원정팀';
+            game.teams.home.name = document.getElementById('home-team-name').value || '홈팀';
+            game.teams.away.pitcher = document.getElementById('away-pitcher').value || '원정투수';
+            game.teams.home.pitcher = document.getElementById('home-pitcher').value || '홈투수';
+
+            for (let i = 1; i <= 9; i++) {
+                game.teams.away.lineup.push(document.getElementById(`away-batter-${i}`).value || `A-${i}번`);
+                game.teams.home.lineup.push(document.getElementById(`home-batter-${i}`).value || `H-${i}번`);
+            }
+
+            // 화면 전환
+            document.getElementById('setup-screen').classList.add('hidden');
+            document.getElementById('game-screen').classList.remove('hidden');
+
+            addLog("경기 시작을 알립니다! PLAY BALL!");
+            updateUI();
+        }
+
+        function updateUI() {
+            renderScoreboard();
+            renderStatus();
+            renderBases();
+            renderCount();
+            renderBatterRecords(); // 타자 기록지 렌더링 추가
+        }
+
+        function renderScoreboard() {
+            const tbody = document.getElementById('scoreboard-body');
+            let html = '';
+
+            // 점수 합계 계산
+            const awayTotal = game.teams.away.runs.reduce((a, b) => a + (b !== null ? b : 0), 0);
+            const homeTotal = game.teams.home.runs.reduce((a, b) => a + (b !== null ? b : 0), 0);
+
+            // 원정팀 행
+            html += `<tr><td class="font-bold">${game.teams.away.name}</td>`;
+            for (let i = 0; i < 9; i++) {
+                let isCurrent = (game.inning === i + 1 && game.isTop);
+                let val = game.teams.away.runs[i] !== null ? game.teams.away.runs[i] : '';
+                // 아직 오지 않은 이닝은 빈칸, 현재 이닝은 노란 배경
+                if (game.inning < i + 1) val = ''; 
+                html += `<td class="${isCurrent ? 'current-inning-col' : ''}">${val}</td>`;
+            }
+            html += `<td class="text-red-600">${awayTotal}</td><td class="text-blue-600">${game.teams.away.hits}</td><td class="text-green-600">${game.teams.away.errors}</td></tr>`;
+
+            // 홈팀 행
+            html += `<tr><td class="font-bold">${game.teams.home.name}</td>`;
+            for (let i = 0; i < 9; i++) {
+                let isCurrent = (game.inning === i + 1 && !game.isTop);
+                let val = game.teams.home.runs[i] !== null ? game.teams.home.runs[i] : '';
+                // 아직 오지 않은 이닝이거나, 원정공격중인 현재 이닝은 빈칸
+                if (game.inning < i + 1 || (game.inning === i+1 && game.isTop && game.teams.home.runs[i] === 0)) val = ''; 
+                if (game.inning === i+1 && game.isTop) val = ''; // 방금 수정한 논리
+                
+                html += `<td class="${isCurrent ? 'current-inning-col' : ''}">${val !== '' ? val : (isCurrent ? '0' : '')}</td>`;
+            }
+            html += `<td class="text-red-600">${homeTotal}</td><td class="text-blue-600">${game.teams.home.hits}</td><td class="text-green-600">${game.teams.home.errors}</td></tr>`;
+
+            tbody.innerHTML = html;
+        }
+
+        function renderStatus() {
+            // 이닝 텍스트
+            document.getElementById('current-inning-text').innerText = `${game.inning}회 ${game.isTop ? '초' : '말'}`;
+            document.getElementById('outs-text').innerText = `${game.outs} OUT`;
+
+            // 공격/수비 팀 식별
+            const offense = game.isTop ? game.teams.away : game.teams.home;
+            const defense = game.isTop ? game.teams.home : game.teams.away;
+
+            // 투수/타자 정보 업데이트
+            document.getElementById('current-pitcher').innerText = defense.pitcher;
+            document.getElementById('current-batter').innerText = offense.lineup[offense.currentBatterIdx];
+            document.getElementById('current-batter-order').innerText = offense.currentBatterIdx + 1;
+        }
+
+        function renderBases() {
+            for (let i = 1; i <= 3; i++) {
+                const baseEl = document.getElementById(`base-${i}`);
+                if (game.bases[i]) {
+                    baseEl.classList.add('occupied');
+                    // 주자 이름의 첫 글자만 표시 (너무 길면 디자인 깨짐)
+                    baseEl.innerText = game.bases[i].substring(0, 1);
+                } else {
+                    baseEl.classList.remove('occupied');
+                    baseEl.innerText = i;
+                }
+            }
+        }
+
+        // 주자를 수동으로 조작하는 함수
+        function toggleBase(baseNum) {
+            if (game.bases[baseNum]) {
+                game.bases[baseNum] = null; // 주자가 있으면 제거
+                addLog(`[수동 조작] ${baseNum}루 주자가 삭제되었습니다.`);
+            } else {
+                game.bases[baseNum] = "임의주자"; // 주자가 없으면 추가
+                addLog(`[수동 조작] ${baseNum}루에 주자가 배치되었습니다.`);
+            }
+            renderBases(); // 화면 갱신
+        }
+
+        function renderCount() {
+            for(let i=1; i<=3; i++) document.getElementById(`b-${i}`).classList.toggle('active', i <= game.balls);
+            for(let i=1; i<=2; i++) document.getElementById(`s-${i}`).classList.toggle('active', i <= game.strikes);
+            for(let i=1; i<=2; i++) document.getElementById(`o-${i}`).classList.toggle('active', i <= game.outs);
+        }
+
+        function addLog(message) {
+            const inningStr = `[${game.inning}회${game.isTop?'초':'말'}]`;
+            game.logs.unshift(`${inningStr} ${message}`);
+            if (game.logs.length > 50) game.logs.pop();
+            
+            const logContainer = document.getElementById('play-log');
+            logContainer.innerHTML = game.logs.map(log => `<div>${log}</div>`).join('');
+        }
+
+        function recordPitch(type) {
+            if (checkGameOver()) return;
+
+            const offense = game.isTop ? game.teams.away : game.teams.home;
+            const batterName = offense.lineup[offense.currentBatterIdx];
+
+            if (type === 'ball') {
+                game.balls++;
+                if (game.balls === 4) {
+                    addLog(`${batterName} 볼넷 출루!`);
+                    recordBatterAction('볼넷'); // 기록지에 볼넷 추가
+                    advanceRunnersWalk(batterName);
+                    resetCountAndNextBatter();
+                }
+            } else if (type === 'strike') {
+                game.strikes++;
+                if (game.strikes === 3) {
+                    addLog(`${batterName} 삼진 아웃!`);
+                    recordBatterAction('삼진 아웃'); // 기록지에 삼진 추가
+                    handleOut();
+                }
+            } else if (type === 'foul') {
+                if (game.strikes < 2) game.strikes++;
+                // 2스트라이크 이후엔 파울카운트 증가 안함
+            } else if (type === 'hbp') {
+                addLog(`${batterName} 몸에맞는볼 출루!`);
+                recordBatterAction('사구'); // 기록지에 사구(몸에맞는볼) 추가
+                advanceRunnersWalk(batterName);
+                resetCountAndNextBatter();
+            }
+            updateUI();
+        }
+
+        function recordHit(basesCnt) {
+            if (checkGameOver()) return;
+
+            const offense = game.isTop ? game.teams.away : game.teams.home;
+            const batterName = offense.lineup[offense.currentBatterIdx];
+            
+            let hitType = basesCnt === 1 ? '1루타' : basesCnt === 2 ? '2루타' : basesCnt === 3 ? '3루타' : '홈런';
+            addLog(`💥 ${batterName} ${hitType} 작렬!`);
+            recordBatterAction(hitType); // 기록지에 안타 추가
+            
+            offense.hits++;
+            advanceRunnersHit(basesCnt, batterName);
+            resetCountAndNextBatter();
+            updateUI();
+        }
+
+        function recordOut(type) {
+            if (checkGameOver()) return;
+            
+            const offense = game.isTop ? game.teams.away : game.teams.home;
+            const batterName = offense.lineup[offense.currentBatterIdx];
+            
+            let outType = type === 'strikeout' ? '삼진' : type === 'ground' ? '땅볼' : '뜬공';
+            addLog(`❌ ${batterName} ${outType} 아웃.`);
+            
+            // 삼진은 recordPitch 함수에서 이미 기록하므로 제외
+            if (type !== 'strikeout') {
+                recordBatterAction(`${outType} 아웃`); // 기록지에 아웃 추가
+            }
+            
+            handleOut();
+            updateUI();
+        }
+
+        function recordBatterAction(resultText) {
+            const offense = game.isTop ? game.teams.away : game.teams.home;
+            const bIdx = offense.currentBatterIdx;
+            const inningIdx = game.inning - 1;
+            
+            // 배열 공간이 모자랄 경우를 대비 (연장전 등)
+            if (!offense.scorebook[bIdx][inningIdx]) {
+                offense.scorebook[bIdx][inningIdx] = [];
+            }
+            offense.scorebook[bIdx][inningIdx].push(resultText);
+        }
+
+        function toggleRecordTeam(teamStr) {
+            currentRecordView = teamStr;
+            const awayBtn = document.getElementById('btn-record-away');
+            const homeBtn = document.getElementById('btn-record-home');
+            
+            // 버튼 디자인 토글
+            if (teamStr === 'away') {
+                awayBtn.className = "px-3 py-1 bg-blue-500 text-white rounded font-bold text-sm transition-colors";
+                homeBtn.className = "px-3 py-1 bg-gray-200 text-gray-700 hover:bg-gray-300 rounded font-bold text-sm transition-colors";
+            } else {
+                awayBtn.className = "px-3 py-1 bg-gray-200 text-gray-700 hover:bg-gray-300 rounded font-bold text-sm transition-colors";
+                homeBtn.className = "px-3 py-1 bg-red-500 text-white rounded font-bold text-sm transition-colors";
+            }
+            renderBatterRecords();
+        }
+
+        function renderBatterRecords() {
+            const team = currentRecordView === 'away' ? game.teams.away : game.teams.home;
+            const thead = document.getElementById('batter-record-head');
+            const tbody = document.getElementById('batter-record-body');
+            
+            const maxInnings = Math.max(9, game.inning);
+            
+            // 헤더 렌더링
+            let headHtml = `<tr class="bg-slate-200"><th class="border border-slate-300 p-2 whitespace-nowrap text-slate-700">타순</th><th class="border border-slate-300 p-2 whitespace-nowrap text-slate-700">이름</th>`;
+            for (let inn = 1; inn <= maxInnings; inn++) {
+                headHtml += `<th class="border border-slate-300 p-2 text-slate-700 w-16">${inn}회</th>`;
+            }
+            headHtml += `</tr>`;
+            thead.innerHTML = headHtml;
+
+            // 바디 렌더링
+            let bodyHtml = '';
+            for (let i = 0; i < 9; i++) {
+                bodyHtml += `<tr class="hover:bg-slate-50 transition-colors">`;
+                bodyHtml += `<td class="border border-slate-300 p-1 bg-slate-100 text-slate-600 font-bold">${i+1}</td>`;
+                bodyHtml += `<td class="border border-slate-300 p-1 font-bold whitespace-nowrap text-slate-800">${team.lineup[i] || ''}</td>`;
+                
+                for (let inn = 0; inn < maxInnings; inn++) {
+                    const records = team.scorebook[i][inn] || [];
+                    const recordStr = records.map(r => {
+                        let colorClass = "bg-slate-100 text-slate-700 border-slate-300"; 
+                        // 기록 결과에 따라 색상 분기
+                        if(r.includes('루타') || r.includes('홈런')) colorClass = "bg-blue-100 text-blue-800 border-blue-200"; 
+                        if(r.includes('아웃') || r.includes('삼진')) colorClass = "bg-red-100 text-red-800 border-red-200"; 
+                        if(r.includes('볼넷') || r.includes('사구')) colorClass = "bg-green-100 text-green-800 border-green-200"; 
+                        
+                        return `<div class="px-1.5 py-0.5 border ${colorClass} text-[11px] rounded m-0.5 whitespace-nowrap shadow-sm font-semibold">${r}</div>`;
+                    }).join('');
+                    
+                    // 현재 공격 차례인 타자의 해당 이닝 칸에 노란색 하이라이트 표시
+                    let tdClass = "border border-slate-300 p-1 text-center min-w-[60px] align-top";
+                    if (game.inning - 1 === inn && 
+                       ((game.isTop && currentRecordView === 'away') || (!game.isTop && currentRecordView === 'home')) && 
+                       team.currentBatterIdx === i) {
+                        tdClass += " bg-yellow-100";
+                    }
+
+                    bodyHtml += `<td class="${tdClass}">${recordStr}</td>`;
+                }
+                bodyHtml += `</tr>`;
+            }
+            tbody.innerHTML = bodyHtml;
+        }
+
+        function handleOut() {
+            game.outs++;
+            if (game.outs >= 3) {
+                addLog(`이닝 종료. 공수 교대됩니다.`);
+                switchInning();
+            } else {
+                resetCountAndNextBatter();
+            }
+        }
+
+        function switchInning() {
+            // 이닝 마무리 (잔루 지우기, 카운트 초기화)
+            game.bases = { 1: null, 2: null, 3: null };
+            game.balls = 0;
+            game.strikes = 0;
+            game.outs = 0;
+
+            if (game.isTop) {
+                game.isTop = false; // 초 -> 말
+            } else {
+                game.inning++;      // 말 -> 다음 회 초
+                game.isTop = true;
+                
+                // 9이닝 이후 기록지 확장 (간단히)
+                if (game.inning > 9) {
+                    game.teams.away.runs.push(0);
+                    game.teams.home.runs.push(0);
+                }
+            }
+        }
+
+        function resetCountAndNextBatter() {
+            game.balls = 0;
+            game.strikes = 0;
+            if (game.outs < 3) {
+                const offense = game.isTop ? game.teams.away : game.teams.home;
+                offense.currentBatterIdx = (offense.currentBatterIdx + 1) % 9;
+            }
+        }
+
+        // 안타 시 진루 (단순화: 1루타는 1칸, 2루타는 2칸 씩 주자가 무조건 이동)
+        function advanceRunnersHit(basesCnt, batterName) {
+            let pointsScored = 0;
+            const newBases = { 1: null, 2: null, 3: null };
+
+            // 기존 주자 이동
+            for (let i = 3; i >= 1; i--) {
+                if (game.bases[i]) {
+                    let nextBase = i + basesCnt;
+                    if (nextBase > 3) {
+                        pointsScored++;
+                        addLog(`🏃 ${game.bases[i]} 득점!`);
+                    } else {
+                        newBases[nextBase] = game.bases[i];
+                    }
+                }
+            }
+
+            // 타자 주자 이동
+            if (basesCnt > 3) {
+                pointsScored++; // 홈런
+                addLog(`🏃 ${batterName} 홈런 득점!`);
+            } else {
+                newBases[basesCnt] = batterName;
+            }
+
+            game.bases = newBases;
+            addRuns(pointsScored);
+        }
+
+        // 볼넷/사구 시 진루 (밀어내기 로직)
+        function advanceRunnersWalk(batterName) {
+            let pointsScored = 0;
+            
+            // 만루 상황
+            if (game.bases[1] && game.bases[2] && game.bases[3]) {
+                addLog(`🏃 밀어내기 득점! (${game.bases[3]})`);
+                pointsScored++;
+                game.bases[3] = game.bases[2];
+                game.bases[2] = game.bases[1];
+                game.bases[1] = batterName;
+            } 
+            // 1,2루
+            else if (game.bases[1] && game.bases[2]) {
+                game.bases[3] = game.bases[2];
+                game.bases[2] = game.bases[1];
+                game.bases[1] = batterName;
+            } 
+            // 1,3루
+            else if (game.bases[1] && game.bases[3]) {
+                game.bases[2] = game.bases[1];
+                game.bases[1] = batterName;
+                // 3루는 그대로
+            }
+            // 1루만
+            else if (game.bases[1]) {
+                game.bases[2] = game.bases[1];
+                game.bases[1] = batterName;
+            }
+            // 1루 빔
+            else {
+                game.bases[1] = batterName;
+            }
+
+            addRuns(pointsScored);
+        }
+
+        function addRuns(count) {
+            if (count > 0) {
+                const offense = game.isTop ? game.teams.away : game.teams.home;
+                offense.runs[game.inning - 1] += count;
+            }
+        }
+
+        function checkGameOver() {
+            if (game.inning > 9 && game.isTop) {
+                // 연장전 룰을 복잡하게 구현하지 않기 위해 단순 알림
+                const homeR = game.teams.home.runs.reduce((a,b)=>a+b,0);
+                const awayR = game.teams.away.runs.reduce((a,b)=>a+b,0);
+                if (homeR !== awayR) {
+                    alert(`경기가 종료되었습니다!`);
+                    return true;
+                }
+            }
+            return false;
+        }
+
+    </script>
+</body>
+</html>
